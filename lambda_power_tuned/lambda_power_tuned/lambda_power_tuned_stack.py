@@ -1,4 +1,4 @@
-from aws_cdk import (aws_codecommit, aws_iam, aws_s3, aws_sam, RemovalPolicy, Stack)
+from aws_cdk import (aws_codebuild, aws_codecommit, aws_codepipeline, aws_iam, aws_s3, aws_sam, RemovalPolicy, Stack)
 from constructs import Construct
 import uuid
 
@@ -6,6 +6,10 @@ import uuid
 class LambdaPowerTunedStack(Stack):
 	def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
 		super().__init__(scope, construct_id, **kwargs)
+		# constants
+		main_branch_name = 'main'
+		terraform_version = '1.6.2'
+
 		# Power Tuning application
 		power_tuning_tools_location = aws_sam.CfnApplication.ApplicationLocationProperty(
 			application_id='arn:aws:serverlessrepo:us-east-1:451282441545:applications/aws-lambda-power-tuning',
@@ -52,9 +56,37 @@ class LambdaPowerTunedStack(Stack):
 							   terraform_s3_iam_policy
 						   ])
 
-		# CI/CD infrastructure and pipeline
+		# source code repository for Lambda function and Terraform
 		target_lambda_function_repository \
 			= aws_codecommit.Repository(self, 'TargetLambdaFunctionRepository',
 										repository_name='TargetLambdaFunctionRepository',
 										code=aws_codecommit.Code.from_directory(
-											'./lambda_power_tuned/terraform'))
+											'./lambda_power_tuned/terraform', main_branch_name))
+
+		# pull request build and integration
+		pull_request_codebuild_project \
+			= aws_codebuild.Project(self, 'PullRequestCodeBuildProject',
+									build_spec=aws_codebuild.BuildSpec.from_object({
+										'version': '0.2',
+										'phases': {
+											'install': {
+												'commands': [
+													'git checkout $CODEBUILD_SOURCE_VERSION',
+													'sudo yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
+													f'unzip terraform_${terraform_version}_linux_arm64.zip',
+													'sudo mv terraform /usr/local/bin/'
+												]
+											},
+											'build': {
+												f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}',
+												'terraform plan'
+											}
+										}
+									}),
+									source=aws_codebuild.Source.code_commit(
+										repository=target_lambda_function_repository),
+									environment=aws_codebuild.BuildEnvironment(
+										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										privileged=True
+									))
