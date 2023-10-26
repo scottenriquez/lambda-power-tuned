@@ -1,4 +1,6 @@
-from aws_cdk import (aws_codebuild, aws_codecommit, aws_codepipeline, aws_iam, aws_s3, aws_sam, RemovalPolicy, Stack)
+from aws_cdk import (aws_codebuild, aws_codecommit, aws_codepipeline,
+					 aws_events, aws_events_targets, aws_iam, aws_s3, aws_sam,
+					 RemovalPolicy, Stack)
 from constructs import Construct
 import uuid
 
@@ -57,7 +59,7 @@ class LambdaPowerTunedStack(Stack):
 						   ])
 
 		# source code repository for Lambda function and Terraform
-		target_lambda_function_repository \
+		lambda_repository \
 			= aws_codecommit.Repository(self, 'TargetLambdaFunctionRepository',
 										repository_name='TargetLambdaFunctionRepository',
 										code=aws_codecommit.Code.from_directory(
@@ -87,8 +89,22 @@ class LambdaPowerTunedStack(Stack):
 										}
 									}),
 									source=aws_codebuild.Source.code_commit(
-										repository=target_lambda_function_repository),
+										repository=lambda_repository),
 									environment=aws_codebuild.BuildEnvironment(
 										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
 										privileged=True
 									))
+
+		pull_request_state_change_rule \
+			= lambda_repository.on_pull_request_state_change('RepositoryOnPullRequestStateChange',
+															 event_pattern=aws_events.EventPattern(
+																 detail={
+																	 'pullRequestStatus': ['Open']}),
+															 target=aws_events_targets.CodeBuildProject(
+																 project=pull_request_codebuild_project,
+																 event=aws_events.RuleTargetInput.from_object(
+																	 {
+																		 'sourceVersion': aws_events.EventField.from_path(
+																			 '$.detail.sourceReference')
+																	 })
+															 ))
