@@ -39,7 +39,7 @@ class LambdaPowerTunedStack(Stack):
 			= aws_iam.ManagedPolicy(self, 'S3CodeBuildManagedPolicy', statements=[
 			aws_iam.PolicyStatement(
 				actions=['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-				resources=terraform_state_s3_bucket.arn_for_objects('*')
+				resources=[terraform_state_s3_bucket.arn_for_objects('*')]
 			),
 			aws_iam.PolicyStatement(
 				actions=['s3:ListBucket'],
@@ -51,8 +51,8 @@ class LambdaPowerTunedStack(Stack):
 						   assumed_by=aws_iam.ServicePrincipal('codebuild.amazonaws.com'),
 						   description='IAM role for CodeBuild to interact with S3',
 						   managed_policies=[
-							   aws_iam.ManagedPolicy.from_managed_policy_name('AWSCodeCommitReadOnly'),
-							   aws_iam.ManagedPolicy.from_managed_policy_name('ReadOnlyAccess'),
+							   aws_iam.ManagedPolicy.from_aws_managed_policy_name('AWSCodeCommitReadOnly'),
+							   aws_iam.ManagedPolicy.from_aws_managed_policy_name('ReadOnlyAccess'),
 							   terraform_s3_iam_policy
 						   ])
 
@@ -79,8 +79,10 @@ class LambdaPowerTunedStack(Stack):
 												]
 											},
 											'build': {
-												f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}',
-												'terraform plan'
+												'commands': [
+													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													'terraform plan'
+												]
 											}
 										}
 									}),
