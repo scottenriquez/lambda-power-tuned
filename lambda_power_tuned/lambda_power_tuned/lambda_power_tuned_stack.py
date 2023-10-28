@@ -92,6 +92,7 @@ class LambdaPowerTunedStack(Stack):
 										repository=lambda_repository),
 									environment=aws_codebuild.BuildEnvironment(
 										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										compute_type=aws_codebuild.ComputeType.SMALL,
 										privileged=True
 									))
 
