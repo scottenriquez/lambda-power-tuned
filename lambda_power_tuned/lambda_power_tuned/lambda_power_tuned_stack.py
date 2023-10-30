@@ -1,4 +1,4 @@
-from aws_cdk import (aws_codebuild, aws_codecommit, aws_codepipeline,
+from aws_cdk import (aws_codebuild, aws_codecommit, aws_codepipeline, aws_codepipeline_actions,
 					 aws_events, aws_events_targets, aws_iam, aws_s3, aws_sam,
 					 RemovalPolicy, Stack)
 from constructs import Construct
@@ -32,12 +32,13 @@ class LambdaPowerTunedStack(Stack):
 		terraform_state_s3_bucket_name = f'terraform-state-{uuid.uuid4()}'
 		terraform_state_s3_bucket \
 			= aws_s3.Bucket(self, 'TerraformStateBucket',
+							auto_delete_objects=True,
 							block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
 							bucket_name=terraform_state_s3_bucket_name,
 							removal_policy=RemovalPolicy.DESTROY)
 
 		# IAM permissions
-		terraform_s3_iam_policy \
+		terraform_build_s3_iam_policy \
 			= aws_iam.ManagedPolicy(self, 'S3CodeBuildManagedPolicy', statements=[
 			aws_iam.PolicyStatement(
 				actions=['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
@@ -48,14 +49,21 @@ class LambdaPowerTunedStack(Stack):
 				resources=['*']
 			)
 		])
-		terraform_codebuild_iam_role \
-			= aws_iam.Role(self, 'TerraformCodeBuildRole',
+		terraform_plan_codebuild_iam_role \
+			= aws_iam.Role(self, 'TerraformPlanCodeBuildRole',
 						   assumed_by=aws_iam.ServicePrincipal('codebuild.amazonaws.com'),
-						   description='IAM role for CodeBuild to interact with S3',
+						   description='IAM role for CodeBuild to interact with S3 for a Terraform plan',
 						   managed_policies=[
 							   aws_iam.ManagedPolicy.from_aws_managed_policy_name('AWSCodeCommitReadOnly'),
 							   aws_iam.ManagedPolicy.from_aws_managed_policy_name('ReadOnlyAccess'),
-							   terraform_s3_iam_policy
+							   terraform_build_s3_iam_policy
+						   ])
+		terraform_apply_codebuild_iam_role \
+			= aws_iam.Role(self, 'TerraformApplyCodeBuildRole',
+						   assumed_by=aws_iam.ServicePrincipal('codebuild.amazonaws.com'),
+						   description='IAM role for CodeBuild to deploy resources via Terraform',
+						   managed_policies=[
+							   aws_iam.ManagedPolicy.from_aws_managed_policy_name('AdministratorAccess')
 						   ])
 
 		# source code repository for Lambda function and Terraform
@@ -94,7 +102,8 @@ class LambdaPowerTunedStack(Stack):
 										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
 										compute_type=aws_codebuild.ComputeType.SMALL,
 										privileged=True
-									))
+									),
+									role=terraform_plan_codebuild_iam_role)
 
 		pull_request_state_change_rule \
 			= lambda_repository.on_pull_request_state_change('RepositoryOnPullRequestStateChange',
@@ -109,3 +118,138 @@ class LambdaPowerTunedStack(Stack):
 																			 '$.detail.sourceReference')
 																	 })
 															 ))
+
+		# Terraform CodeBuild projects
+		terraform_plan_codebuild_project \
+			= aws_codebuild.Project(self, 'TerraformPlanCodeBuildProject',
+									build_spec=aws_codebuild.BuildSpec.from_object({
+										'version': '0.2',
+										'phases': {
+											'install': {
+												'commands': [
+													'git checkout $CODEBUILD_SOURCE_VERSION',
+													'sudo yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
+													f'unzip terraform_${terraform_version}_linux_arm64.zip',
+													'sudo mv terraform /usr/local/bin/'
+												]
+											},
+											'build': {
+												'commands': [
+													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													'terraform plan -out tfplan.out'
+												]
+											}
+										}
+									}),
+									source=aws_codebuild.Source.code_commit(
+										repository=lambda_repository),
+									environment=aws_codebuild.BuildEnvironment(
+										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										compute_type=aws_codebuild.ComputeType.SMALL,
+										privileged=True
+									),
+									role=terraform_plan_codebuild_iam_role)
+		terraform_apply_codebuild_project \
+			= aws_codebuild.Project(self, 'TerraformApplyCodeBuildProject',
+									build_spec=aws_codebuild.BuildSpec.from_object({
+										'version': '0.2',
+										'phases': {
+											'install': {
+												'commands': [
+													'git checkout $CODEBUILD_SOURCE_VERSION',
+													'sudo yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
+													f'unzip terraform_${terraform_version}_linux_arm64.zip',
+													'sudo mv terraform /usr/local/bin/'
+												]
+											},
+											'build': {
+												'commands': [
+													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													'terraform apply tfplan.out'
+												]
+											}
+										}
+									}),
+									source=aws_codebuild.Source.code_commit(
+										repository=lambda_repository),
+									environment=aws_codebuild.BuildEnvironment(
+										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										compute_type=aws_codebuild.ComputeType.SMALL,
+										privileged=True
+									),
+									role=terraform_apply_codebuild_iam_role)
+		terraform_destroy_codebuild_project \
+			= aws_codebuild.Project(self, 'TerraformDestroyCodeBuildProject',
+									build_spec=aws_codebuild.BuildSpec.from_object({
+										'version': '0.2',
+										'phases': {
+											'install': {
+												'commands': [
+													'git checkout $CODEBUILD_SOURCE_VERSION',
+													'sudo yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
+													f'unzip terraform_${terraform_version}_linux_arm64.zip',
+													'sudo mv terraform /usr/local/bin/'
+												]
+											},
+											'build': {
+												'commands': [
+													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													'terraform destroy -auto-approve'
+												]
+											}
+										}
+									}),
+									source=aws_codebuild.Source.code_commit(
+										repository=lambda_repository),
+									environment=aws_codebuild.BuildEnvironment(
+										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										compute_type=aws_codebuild.ComputeType.SMALL,
+										privileged=True
+									),
+									role=terraform_apply_codebuild_iam_role)
+
+		# CI/CD pipeline resources
+		# the UUID ensures that the bucket name will be unique for this demo, but do not use in production
+		# when the CDK application is deployed again, a new UUID will be generated and thus a new bucket
+		codepipeline_artifact_bucket_name = f'codepipeline-artifact-{uuid.uuid4()}'
+		codepipeline_artifact_bucket \
+			= aws_s3.Bucket(self, 'CodePipelineArtifactBucket',
+							auto_delete_objects=True,
+							block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
+							bucket_name=codepipeline_artifact_bucket_name,
+							removal_policy=RemovalPolicy.DESTROY)
+		cicd_pipeline \
+			= aws_codepipeline.Pipeline(self, 'LambdaCICDPipeline',
+										artifact_bucket=codepipeline_artifact_bucket,
+										pipeline_name='LambdaCICDPipeline')
+		# source
+		source_artifact = aws_codepipeline.Artifact()
+		source_stage = cicd_pipeline.add_stage(stage_name='Source')
+		source_stage.add_action(
+			aws_codepipeline_actions.CodeCommitSourceAction(action_name='CodeCommitSource',
+															branch=main_branch_name,
+															output=source_artifact,
+															repository=lambda_repository))
+		# approve build
+		approve_build_stage = cicd_pipeline.add_stage(stage_name='ApproveBuild')
+		build_manual_approval_action = aws_codepipeline_actions.ManualApprovalAction(action_name='BuildManualApproval')
+		approve_build_stage.add_action(build_manual_approval_action)
+		# build
+		build_stage = cicd_pipeline.add_stage(stage_name='Build')
+		terraform_plan_artifact = aws_codepipeline.Artifact()
+		build_stage.add_action(aws_codepipeline_actions.CodeBuildAction(action_name='TerraformPlan',
+																		input=source_artifact,
+																		outputs=[terraform_plan_artifact],
+																		project=terraform_plan_codebuild_project))
+		# approve deploy
+		approve_deploy_stage = cicd_pipeline.add_stage(stage_name='ApproveDeploy')
+		deploy_manual_approval_action = aws_codepipeline_actions.ManualApprovalAction(action_name='DeployManualApproval')
+		approve_deploy_stage.add_action(deploy_manual_approval_action)
+		# deploy
+		deploy_stage = cicd_pipeline.add_stage(stage_name='Deploy')
+		deploy_stage.add_action(aws_codepipeline_actions.CodeBuildAction(action_name='TerraformApply',
+																		 input=terraform_plan_artifact,
+																		 project=terraform_apply_codebuild_project))
