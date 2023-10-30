@@ -82,15 +82,15 @@ class LambdaPowerTunedStack(Stack):
 											'install': {
 												'commands': [
 													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'sudo yum -y install unzip',
-													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
-													f'unzip terraform_${terraform_version}_linux_arm64.zip',
-													'sudo mv terraform /usr/local/bin/'
+													'yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
+													f'unzip terraform_{terraform_version}_linux_arm64.zip',
+													'mv terraform /usr/local/bin/'
 												]
 											},
 											'build': {
 												'commands': [
-													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform plan'
 												]
 											}
@@ -124,19 +124,21 @@ class LambdaPowerTunedStack(Stack):
 			= aws_codebuild.Project(self, 'TerraformPlanCodeBuildProject',
 									build_spec=aws_codebuild.BuildSpec.from_object({
 										'version': '0.2',
+										'artifacts': {
+											'files': ['*.tf', 'lambda/*', '*.zip', 'tfplan.out']
+										},
 										'phases': {
 											'install': {
 												'commands': [
-													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'sudo yum -y install unzip',
-													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
-													f'unzip terraform_${terraform_version}_linux_arm64.zip',
-													'sudo mv terraform /usr/local/bin/'
+													'yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
+													f'unzip terraform_{terraform_version}_linux_arm64.zip',
+													'mv terraform /usr/local/bin/'
 												]
 											},
 											'build': {
 												'commands': [
-													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform plan -out tfplan.out'
 												]
 											}
@@ -157,16 +159,15 @@ class LambdaPowerTunedStack(Stack):
 										'phases': {
 											'install': {
 												'commands': [
-													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'sudo yum -y install unzip',
-													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
-													f'unzip terraform_${terraform_version}_linux_arm64.zip',
-													'sudo mv terraform /usr/local/bin/'
+													'yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
+													f'unzip terraform_{terraform_version}_linux_arm64.zip',
+													'mv terraform /usr/local/bin/'
 												]
 											},
 											'build': {
 												'commands': [
-													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform apply tfplan.out'
 												]
 											}
@@ -187,16 +188,15 @@ class LambdaPowerTunedStack(Stack):
 										'phases': {
 											'install': {
 												'commands': [
-													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'sudo yum -y install unzip',
-													f'wget https://releases.hashicorp.com/terraform/${terraform_version}/terraform_${terraform_version}_linux_arm64.zip',
-													f'unzip terraform_${terraform_version}_linux_arm64.zip',
-													'sudo mv terraform /usr/local/bin/'
+													'yum -y install unzip',
+													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
+													f'unzip terraform_{terraform_version}_linux_arm64.zip',
+													'mv terraform /usr/local/bin/'
 												]
 											},
 											'build': {
 												'commands': [
-													f'terraform init -backend-config="bucket=${terraform_state_s3_bucket.bucket_name}"',
+													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform destroy -auto-approve'
 												]
 											}
