@@ -82,16 +82,24 @@ class LambdaPowerTunedStack(Stack):
 											'install': {
 												'commands': [
 													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'yum -y install unzip',
+													'yum -y install unzip util-linux',
 													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
 													f'unzip terraform_{terraform_version}_linux_arm64.zip',
-													'mv terraform /usr/local/bin/'
+													'mv terraform /usr/local/bin/',
+													'export BUILD_UUID=$(uuidgen)'
 												]
 											},
 											'build': {
 												'commands': [
+													# create plan against the production function
 													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
-													'terraform plan'
+													'terraform plan -out tfplan-pr-$BUILD_UUID.out',
+													# write plan to the pull request comments
+													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"$(cat tfplan-pr-$BUILD_UUID.out)\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
+													# create a new state file to manage the transient environment for performance tuning
+													f'terraform init -reconfigure -backend-config="bucket={terraform_state_s3_bucket.bucket_name}" -backend-config="key=pr-$BUILD_UUID.tfstate"',
+													'terraform apply -auto-approve',
+													'terraform destroy -auto-approve'
 												]
 											}
 										}
@@ -100,10 +108,14 @@ class LambdaPowerTunedStack(Stack):
 										repository=lambda_repository),
 									environment=aws_codebuild.BuildEnvironment(
 										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
+										environment_variables={
+											'REPOSITORY_NAME': aws_codebuild.BuildEnvironmentVariable(
+												value=lambda_repository.repository_name)
+										},
 										compute_type=aws_codebuild.ComputeType.SMALL,
 										privileged=True
 									),
-									role=terraform_plan_codebuild_iam_role)
+									role=terraform_apply_codebuild_iam_role)
 
 		pull_request_state_change_rule \
 			= lambda_repository.on_pull_request_state_change('RepositoryOnPullRequestStateChange',
@@ -115,7 +127,24 @@ class LambdaPowerTunedStack(Stack):
 																 event=aws_events.RuleTargetInput.from_object(
 																	 {
 																		 'sourceVersion': aws_events.EventField.from_path(
-																			 '$.detail.sourceReference')
+																			 '$.detail.sourceReference'),
+																		 'environmentVariablesOverride': [
+																			 {
+																				 'name': 'PULL_REQUEST_ID',
+																				 'value': aws_events.EventField.from_path(
+																					 '$.detail.pullRequestId')
+																			 },
+																			 {
+																				 'name': 'SOURCE_COMMIT',
+																				 'value': aws_events.EventField.from_path(
+																					 '$.detail.sourceCommit')
+																			 },
+																			 {
+																				 'name': 'DESTINATION_COMMIT',
+																				 'value': aws_events.EventField.from_path(
+																					 '$.detail.destinationCommit')
+																			 }
+																		 ]
 																	 })
 															 ))
 
@@ -246,7 +275,8 @@ class LambdaPowerTunedStack(Stack):
 																		project=terraform_plan_codebuild_project))
 		# approve deploy
 		approve_deploy_stage = cicd_pipeline.add_stage(stage_name='ApproveDeploy')
-		deploy_manual_approval_action = aws_codepipeline_actions.ManualApprovalAction(action_name='DeployManualApproval')
+		deploy_manual_approval_action = aws_codepipeline_actions.ManualApprovalAction(
+			action_name='DeployManualApproval')
 		approve_deploy_stage.add_action(deploy_manual_approval_action)
 		# deploy
 		deploy_stage = cicd_pipeline.add_stage(stage_name='Deploy')
