@@ -82,7 +82,7 @@ class LambdaPowerTunedStack(Stack):
 											'install': {
 												'commands': [
 													'git checkout $CODEBUILD_SOURCE_VERSION',
-													'yum -y install unzip util-linux',
+													'yum -y install unzip util-linux jq',
 													f'wget https://releases.hashicorp.com/terraform/{terraform_version}/terraform_{terraform_version}_linux_arm64.zip',
 													f'unzip terraform_{terraform_version}_linux_arm64.zip',
 													'mv terraform /usr/local/bin/',
@@ -94,8 +94,10 @@ class LambdaPowerTunedStack(Stack):
 													# create plan against the production function
 													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform plan -out tfplan-pr-$BUILD_UUID.out',
+													'terraform show -json tfplan-pr-$BUILD_UUID.out > plan-$BUILD_UUID.json',
+													'echo "\`\`\`json\n$(cat plan-$BUILD_UUID.json | jq \'.resource_changes\')\n\`\`\`" > plan-formatted-$BUILD_UUID.json',
 													# write plan to the pull request comments
-													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"$(cat tfplan-pr-$BUILD_UUID.out)\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
+													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"$(cat plan-formatted-$BUILD_UUID.json)\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													# create a new state file to manage the transient environment for performance tuning
 													f'terraform init -reconfigure -backend-config="bucket={terraform_state_s3_bucket.bucket_name}" -backend-config="key=pr-$BUILD_UUID.tfstate"',
 													'terraform apply -auto-approve',
