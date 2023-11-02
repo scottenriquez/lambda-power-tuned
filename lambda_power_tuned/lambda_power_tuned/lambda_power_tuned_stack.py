@@ -91,13 +91,15 @@ class LambdaPowerTunedStack(Stack):
 											},
 											'build': {
 												'commands': [
+													'printenv',
+													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"The pull request CodeBuild project has been triggered. See the [logs for more details]($CODEBUILD_BUILD_URL).\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													# create plan against the production function
 													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
 													'terraform plan -out tfplan-pr-$BUILD_UUID.out',
 													'terraform show -json tfplan-pr-$BUILD_UUID.out > plan-$BUILD_UUID.json',
 													'echo "\`\`\`json\n$(cat plan-$BUILD_UUID.json | jq \'.resource_changes\')\n\`\`\`" > plan-formatted-$BUILD_UUID.json',
 													# write plan to the pull request comments
-													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"$(cat plan-formatted-$BUILD_UUID.json)\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
+													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"Terraform resource changes:\n$(cat plan-formatted-$BUILD_UUID.json | head -c 10000)\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													# create a new state file to manage the transient environment for performance tuning
 													f'terraform init -reconfigure -backend-config="bucket={terraform_state_s3_bucket.bucket_name}" -backend-config="key=pr-$BUILD_UUID.tfstate"',
 													'terraform apply -auto-approve',
@@ -108,6 +110,7 @@ class LambdaPowerTunedStack(Stack):
 									}),
 									source=aws_codebuild.Source.code_commit(
 										repository=lambda_repository),
+									badge=True,
 									environment=aws_codebuild.BuildEnvironment(
 										build_image=aws_codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
 										environment_variables={
