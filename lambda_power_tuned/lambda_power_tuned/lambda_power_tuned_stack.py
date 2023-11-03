@@ -10,12 +10,12 @@ class LambdaPowerTunedStack(Stack):
 		super().__init__(scope, construct_id, **kwargs)
 		# constants
 		main_branch_name = 'main'
-		terraform_version = '1.6.2'
+		terraform_version = '1.6.3'
 
 		# Power Tuning application
 		power_tuning_tools_location = aws_sam.CfnApplication.ApplicationLocationProperty(
 			application_id='arn:aws:serverlessrepo:us-east-1:451282441545:applications/aws-lambda-power-tuning',
-			semantic_version='4.3.2'
+			semantic_version='4.3.3'
 		)
 		power_tuning_tools_parameters = {
 			'lambdaResource': '*',
@@ -91,7 +91,6 @@ class LambdaPowerTunedStack(Stack):
 											},
 											'build': {
 												'commands': [
-													'printenv',
 													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"The pull request CodeBuild project has been triggered. See the [logs for more details]($CODEBUILD_BUILD_URL).\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													# create plan against the production function
 													f'terraform init -backend-config="bucket={terraform_state_s3_bucket.bucket_name}"',
@@ -103,15 +102,8 @@ class LambdaPowerTunedStack(Stack):
 													# create a new state file to manage the transient environment for performance tuning
 													f'terraform init -reconfigure -backend-config="bucket={terraform_state_s3_bucket.bucket_name}" -backend-config="key=pr-$BUILD_UUID.tfstate"',
 													'terraform apply -auto-approve',
-													'export TARGET_LAMBDA_ARN=$(terraform output -raw arn)',
-													'echo "$(jq --arg arn "$TARGET_LAMBDA_ARN" \'. += {"lambdaARN" : $arn }\' power-tuning-input.json)" > power-tuning-input-$BUILD_UUID.json',
-													'export POWER_TUNING_INPUT_JSON=$(cat power-tuning-input-$BUILD_UUID.json)',
 													# execute the state machine and get tuning results
 													'sh execute-power-tuning.sh',
-													# here!
-													'echo "$(cat power-tuning-output-$BUILD_UUID.json)"',
-													'export POWER_TUNING_OUTPUT_URL=$(cat power-tuning-output-$BUILD_UUID.json | jq -r \'.stateMachine .visualization\')',
-													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"Lambda tuning is complete. See the [results for full details]($POWER_TUNING_OUTPUT_URL).\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													'terraform destroy -auto-approve'
 												]
 											}
