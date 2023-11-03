@@ -104,11 +104,13 @@ class LambdaPowerTunedStack(Stack):
 													f'terraform init -reconfigure -backend-config="bucket={terraform_state_s3_bucket.bucket_name}" -backend-config="key=pr-$BUILD_UUID.tfstate"',
 													'terraform apply -auto-approve',
 													'export TARGET_LAMBDA_ARN=$(terraform output -raw arn)',
-													'echo "$(jq --arg arn "$TARGET_LAMBDA_ARN" \'.fields += {"lambdaARN" : $arn }\' power-tuning-input.json)" > power-tuning-input-$BUILD_UUID.json',
+													'echo "$(jq --arg arn "$TARGET_LAMBDA_ARN" \'. += {"lambdaARN" : $arn }\' power-tuning-input.json)" > power-tuning-input-$BUILD_UUID.json',
 													'export POWER_TUNING_INPUT_JSON=$(cat power-tuning-input-$BUILD_UUID.json)',
 													# execute the state machine and get tuning results
 													'sh execute-power-tuning.sh',
-													'export POWER_TUNING_OUTPUT_URL=$(cat power-tuning-output-$BUILD_UUID.json | jq \'.stateMachine .visualization\')',
+													# here!
+													'echo "$(cat power-tuning-output-$BUILD_UUID.json)"',
+													'export POWER_TUNING_OUTPUT_URL=$(cat power-tuning-output-$BUILD_UUID.json | jq -r \'.stateMachine .visualization\')',
 													'aws codecommit post-comment-for-pull-request --repository-name $REPOSITORY_NAME --pull-request-id $PULL_REQUEST_ID --content \"Lambda tuning is complete. See the [results for full details]($POWER_TUNING_OUTPUT_URL).\" --before-commit-id $SOURCE_COMMIT --after-commit-id $DESTINATION_COMMIT',
 													'terraform destroy -auto-approve'
 												]
