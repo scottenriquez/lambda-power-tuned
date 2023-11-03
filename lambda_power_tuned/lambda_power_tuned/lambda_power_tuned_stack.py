@@ -123,8 +123,8 @@ class LambdaPowerTunedStack(Stack):
 										environment_variables={
 											'REPOSITORY_NAME': aws_codebuild.BuildEnvironmentVariable(
 												value=lambda_repository.repository_name),
-											'POWER_TUNING_NESTED_STACK_ID': aws_codebuild.BuildEnvironmentVariable(
-												value=power_tuning_tools_application.stack.stack_id)
+											'STATE_MACHINE_ARN': aws_codebuild.BuildEnvironmentVariable(
+												value=power_tuning_tools_application.get_att('Outputs.StateMachineARN').to_string())
 										},
 										compute_type=aws_codebuild.ComputeType.SMALL,
 										privileged=True

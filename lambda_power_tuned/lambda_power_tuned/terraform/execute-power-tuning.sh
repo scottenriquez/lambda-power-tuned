@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# retrieve state machine ARN
-STATE_MACHINE_ARN=$(aws cloudformation describe-stacks --stack-name $POWER_TUNING_NESTED_STACK_ID --query 'Stacks[0].Outputs[?OutputKey==`StateMachineARN`].OutputValue' --output text)
-
 # start execution
 EXECUTION_ARN=$(aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "$POWER_TUNING_INPUT_JSON"  --query 'executionArn' --output text)
 
