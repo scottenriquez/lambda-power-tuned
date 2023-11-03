@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # retrieve state machine ARN
-STATE_MACHINE_ARN=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`StateMachineARN`].OutputValue' --output text)
+STATE_MACHINE_ARN=$(aws cloudformation describe-stacks --stack-name $POWER_TUNING_NESTED_STACK_ID --query 'Stacks[0].Outputs[?OutputKey==`StateMachineARN`].OutputValue' --output text)
 
 # start execution
-EXECUTION_ARN=$(aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "$INPUT"  --query 'executionArn' --output text)
+EXECUTION_ARN=$(aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "$POWER_TUNING_INPUT_JSON"  --query 'executionArn' --output text)
 
 echo -n "Execution started..."
 
@@ -27,7 +27,8 @@ do
         echo $STATUS
         echo "Execution output: "
         # retrieve output
-        aws stepfunctions describe-execution --execution-arn $EXECUTION_ARN --query 'output' --output text
+        aws stepfunctions describe-execution --execution-arn $EXECUTION_ARN --query 'output' --output text > power-tuning-output-$BUILD_UUID.json
+
         break
     fi
 done

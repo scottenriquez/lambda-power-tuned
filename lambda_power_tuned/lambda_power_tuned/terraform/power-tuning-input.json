@@ -1,0 +1,12 @@
+{
+	"powerValues": [
+		128,
+		256,
+		512,
+		1024
+	],
+	"num": 50,
+	"payload": {},
+	"parallelInvocation": true,
+	"strategy": "cost"
+}

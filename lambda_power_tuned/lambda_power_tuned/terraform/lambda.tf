@@ -34,3 +34,7 @@ resource "aws_lambda_function" "test_lambda" {
 
 	runtime = "python3.11"
 }
+
+output "arn" {
+  value = aws_lambda_function.test_lambda.arn
+}
