@@ -1,9 +1,14 @@
 ## Solution Overview
-As I [wrote about previously](https://scottie.is/writing/cost-conscious-terraform/), AWS users are shifting left on costs using DevOps and automation. While tools like [Infracost](https://www.infracost.io/) are powerful for estimating costs for Lambda and other services via a usage file, they alone do not provide optimization or tuning feedback during the development lifecycle. This is where a tool like AWS Lambda Power Tuning assists:
+## Solution Overview
+As I [wrote about previously](https://scottie.is/writing/cost-conscious-terraform/), AWS users are shifting left on costs using DevOps and automation. While tools like [Infracost](https://www.infracost.io/) are powerful for estimating costs for Lambda and other services, they alone do not provide optimization or tuning feedback during the development lifecycle. This is where a tool like AWS Lambda Power Tuning assists:
 
 > AWS Lambda Power Tuning is an open-source tool that can help you visualize and fine-tune the memory and power configuration of Lambda functions. It runs in your own AWS account, powered by AWS Step Functions, and it supports three optimization strategies: cost, speed, and balanced.
 
-This solution demonstrates AWS Lambda Tuning Tools integration with a CodeSuite CI/CD pipeline to bring Lambda tuning information to the pull request process and code review discussion. The source code is hosted on [GitHub](https://github.com/scottenriquez/lambda-power-tuned).
+Lambda pricing is determined by the number of invocations and the execution duration. From a cost optimization perspective, there are several strategies for decreasing duration costs including using Graviton for 20% savings (which this solution does for both Lambda and CodeBuild), leveraging the latest runtime versions, taking advantage of execution reuse, etc. In addition to these, optimizing memory allocation is a key mechanism for efficiency. From the [documentation](https://aws.amazon.com/lambda/pricing/):
+
+> The [duration] price depends on the amount of memory you allocate to your function. In the AWS Lambda resource model, you choose the amount of memory you want for your function and are allocated proportional CPU power and other resources. An increase in memory size triggers an equivalent increase in CPU available to your function.
+
+Without running the Lambda function using different configurations, it is unclear what is the most optimal memory amount for cost and/or performance. This solution demonstrates AWS Lambda Tuning Tools integration with a CodeSuite CI/CD pipeline to bring Lambda tuning information to the pull request process and code review discussion. The source code is hosted on [GitHub](https://github.com/scottenriquez/lambda-power-tuned).
 
 ## Solution Architecture
 ![Diagram](lambda-power-tuned-architecture-diagram.png)
