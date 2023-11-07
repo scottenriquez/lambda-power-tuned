@@ -1,5 +1,4 @@
 ## Solution Overview
-## Solution Overview
 As I [wrote about previously](https://scottie.is/writing/cost-conscious-terraform/), AWS users are shifting left on costs using DevOps and automation. While tools like [Infracost](https://www.infracost.io/) are powerful for estimating costs for Lambda and other services, they alone do not provide optimization or tuning feedback during the development lifecycle. This is where a tool like AWS Lambda Power Tuning assists:
 
 > AWS Lambda Power Tuning is an open-source tool that can help you visualize and fine-tune the memory and power configuration of Lambda functions. It runs in your own AWS account, powered by AWS Step Functions, and it supports three optimization strategies: cost, speed, and balanced.
